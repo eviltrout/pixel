@@ -5,10 +5,22 @@ var ROWS = 10.0,
 
 export default Ember.View.extend({
   tagName: 'canvas',
+  attributeBindings: ['width', 'height'],
+
   pixels: null,
   width: 400,
   height: 400,
-  attributeBindings: ['width', 'height'],
+  currentX: null,
+  currentY: null,
+  painting: false,
+
+  sx: function() {
+    return this.get('width') / COLS;
+  }.property('width'),
+
+  sy: function() {
+    return this.get('height') / COLS;
+  }.property('height'),
 
   _init: function() {
     var pixels = [];
@@ -21,37 +33,58 @@ export default Ember.View.extend({
     this.set('pixels', pixels);
   }.on('init'),
 
-  click: function(e) {
-    var canvas = e.target,
-        x = e.pageX - canvas.offsetLeft,
-        y = e.pageY - canvas.offsetTop,
-        sx = this.sx,
-        sy = this.sy,
-        px = Math.floor(x / sx),
-        py = Math.floor(y / sy),
-        pixels = this.get('pixels');
+  mouseDown: function() {
+    this.set('painting', true);
+    this._paint();
+  },
 
-    pixels[py][px] = 1;
-    this._render();
+  mouseUp: function() {
+    this.set('painting', false);
+  },
+
+  _paint: function() {
+    var pixels = this.get('pixels');
+    pixels[this.get('currentY')][this.get('currentX')] = 1;
+    this._rerender();
+  },
+
+  _rerenderTrigger: function() {
+    this._rerender();
+  }.observes('currentX', 'currentY'),
+
+  mouseMove: function(e) {
+    var canvas = e.target;
+
+    this.setProperties({
+      currentX: Math.floor((e.pageX - canvas.offsetLeft) / this.get('sx')),
+      currentY: Math.floor((e.pageY - canvas.offsetTop) / this.get('sy')),
+    });
+
+    if (this.get('painting')) {
+      this._paint();
+    }
   },
 
   _inserted: function() {
-    this.canvas = this.$()[0];
-    this.ctx = this.canvas.getContext('2d');
-    this.sx = this.$().width() / COLS;
-    this.sy = this.$().height() / ROWS;
-    this._render();
+    this._canvas = this.$()[0];
+    this._ctx = this._canvas.getContext('2d');
+    this._rerender();
   }.on('didInsertElement'),
 
+  _rerender: function() {
+    Ember.run.once(this, '_render');
+  },
+
   _render: function() {
-    var ctx = this.ctx;
+    var ctx = this._ctx;
+    if (!ctx) { return; }
 
     ctx.fillStyle="#fff";
-    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.fillRect(0, 0, this.get('width'), this.get('height'));
     ctx.fill();
 
-    var sx = this.sx,
-        sy = this.sy,
+    var sx = this.get('sx'),
+        sy = this.get('sy'),
         pixels = this.get('pixels');
 
     ctx.fillStyle="#ff0000";
@@ -60,11 +93,17 @@ export default Ember.View.extend({
         if (pixels[j][i]) {
           var x = i * sx,
               y = j * sy;
-          ctx.fillRect(x, y, sx, sy);
+          ctx.fillRect(x-0.5, y-0.5, sx+0.5, sy+0.5);
           ctx.fill();
         }
       }
     }
+
+    // Show current pixel
+    ctx.strokeStyle="rgba(0, 0, 0, 0.5)";
+    var cx = (this.get('currentX') * sx),
+        cy = (this.get('currentY') * sy);
+    ctx.strokeRect(cx-0.5, cy-0.5, sx+0.5, sy+0.5);
   }
 
 });
